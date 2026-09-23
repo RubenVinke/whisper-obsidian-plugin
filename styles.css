@@ -36,3 +36,16 @@
 	width: 14px;
 	height: 14px;
 }
+.recording-controls .device-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+.recording-controls .device-row .device-label {
+	white-space: nowrap;
+}
+.recording-controls .device-row.is-disabled {
+	opacity: 0.5;
+}

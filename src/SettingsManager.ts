@@ -39,6 +39,7 @@ export interface WhisperSettings {
 	cursorContext: boolean;
 	// Recording
 	audioDeviceId: string;
+	audioDeviceLabel: string;
 	saveAudioFile: boolean;
 	audioSavePath: string;
 	// Output
@@ -82,6 +83,7 @@ export const DEFAULT_WHISPER: WhisperSettings = {
 	responseFormat: "json",
 	cursorContext: false,
 	audioDeviceId: "default",
+	audioDeviceLabel: "",
 	saveAudioFile: true,
 	audioSavePath: "",
 	createNoteFile: true,
