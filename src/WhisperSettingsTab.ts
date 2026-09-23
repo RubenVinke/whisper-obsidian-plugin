@@ -6,6 +6,13 @@ import {
 	PROVIDER_URLS,
 	PROVIDER_DEFAULT_MODELS,
 } from "./SettingsManager";
+import {
+	DEFAULT_DEVICE_ID,
+	buildDeviceOptions,
+	listAudioInputs,
+	requestMicrophoneAccess,
+	resolveSelectedDevice,
+} from "./audioDevices";
 
 export class WhisperSettingsTab extends PluginSettingTab {
 	private plugin: Whisper;
@@ -215,78 +222,41 @@ export class WhisperSettingsTab extends PluginSettingTab {
 			.setName("Microphone")
 			.setDesc("Select the audio input device to use for recording");
 
-		// Request permission first to get device labels (some browsers hide labels until permission is granted)
-		try {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: true,
-			});
-			// Stop the stream immediately to release the microphone
-			stream.getTracks().forEach((track) => track.stop());
-		} catch (err) {
-			// Permission denied or error - continue anyway, devices may still be listed
-			console.log(
-				"Microphone permission not granted, device labels may be limited"
+		// Labels are hidden until microphone permission has been granted once.
+		await requestMicrophoneAccess();
+		const devices = await listAudioInputs();
+		const options = buildDeviceOptions(devices);
+
+		const selection = resolveSelectedDevice(
+			this.plugin.settings.audioDeviceId,
+			this.plugin.settings.audioDeviceLabel,
+			devices
+		);
+
+		if (selection.changed) {
+			this.plugin.settings.audioDeviceId = selection.deviceId;
+			this.plugin.settings.audioDeviceLabel = selection.label;
+			await this.settingsManager.saveSettings(this.plugin.settings);
+			this.plugin.recorder.setDeviceId(
+				selection.deviceId === DEFAULT_DEVICE_ID
+					? null
+					: selection.deviceId
 			);
-		}
-
-		// Enumerate devices
-		let devices: MediaDeviceInfo[] = [];
-		try {
-			const allDevices = await navigator.mediaDevices.enumerateDevices();
-			devices = allDevices.filter(
-				(device) => device.kind === "audioinput"
-			);
-		} catch (err) {
-			console.error("Error enumerating audio devices:", err);
-		}
-
-		// Build dropdown options: "default" + all audio input devices
-		const options: Record<string, string> = {};
-		options["default"] = "Default";
-
-		devices.forEach((device) => {
-			const label =
-				device.label ||
-				`Unknown device (${device.deviceId.substring(0, 8)})`;
-			options[device.deviceId] = label;
-		});
-
-		// Get current value, defaulting to "default" if not set or device not found
-		let currentValue = this.plugin.settings.audioDeviceId || "default";
-		if (currentValue !== "default" && !options[currentValue]) {
-			const storedLabel = this.plugin.settings.audioDeviceLabel;
-			const relabeled = storedLabel
-				? devices.find((device) => device.label === storedLabel)
-				: undefined;
-
-			if (relabeled) {
-				currentValue = relabeled.deviceId;
-				this.plugin.settings.audioDeviceId = relabeled.deviceId;
-				await this.settingsManager.saveSettings(this.plugin.settings);
-				this.plugin.recorder.setDeviceId(relabeled.deviceId);
-			} else {
-				// Device no longer available, reset to default
-				currentValue = "default";
-				this.plugin.settings.audioDeviceId = "default";
-				this.plugin.settings.audioDeviceLabel = "";
-				await this.settingsManager.saveSettings(this.plugin.settings);
-				this.plugin.recorder.setDeviceId(null);
-			}
 		}
 
 		setting.addDropdown((dropdown) => {
 			Object.keys(options).forEach((deviceId) => {
 				dropdown.addOption(deviceId, options[deviceId]);
 			});
-			dropdown.setValue(currentValue);
+			dropdown.setValue(selection.deviceId);
 			dropdown.onChange(async (value) => {
 				this.plugin.settings.audioDeviceId = value;
 				this.plugin.settings.audioDeviceLabel =
-					value === "default" ? "" : options[value];
+					value === DEFAULT_DEVICE_ID ? "" : options[value];
 				await this.settingsManager.saveSettings(this.plugin.settings);
 				// Update recorder with new device ID
 				this.plugin.recorder.setDeviceId(
-					value === "default" ? null : value
+					value === DEFAULT_DEVICE_ID ? null : value
 				);
 			});
 		});
